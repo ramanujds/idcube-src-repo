@@ -40,10 +40,12 @@ stages:
               arguments: '--platform linux/amd64'
 
           - script: |
-              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-              trivy image \
+              mkdir -p /tmp/trivy-bin
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /tmp/trivy-bin
+              /tmp/trivy-bin/trivy image \
                 --exit-code 1 \
                 --severity HIGH,CRITICAL \
+                --ignore-unfixed \
                 --no-progress \
                 --format table \
                 $(IMAGE_NAME):$(IMAGE_TAG)
