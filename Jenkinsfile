@@ -47,8 +47,9 @@ pipeline {
 				echo 'Scanning Docker image for vulnerabilities'
 				sh '''
 				export PATH=$PATH:/usr/local/bin:/opt/homebrew/bin
-				curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-				trivy image \
+				mkdir -p /tmp/trivy-bin
+				curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /tmp/trivy-bin
+				/tmp/trivy-bin/trivy image \
 				--exit-code 1 \
 				--severity HIGH,CRITICAL \
 				--no-progress \
