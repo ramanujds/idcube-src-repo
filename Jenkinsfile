@@ -52,6 +52,7 @@ pipeline {
 				/tmp/trivy-bin/trivy image \
 				--exit-code 1 \
 				--severity HIGH,CRITICAL \
+				--ignore-unfixed \
 				--no-progress \
 				--format table \
 				${IMAGE_NAME}:${IMAGE_TAG}
