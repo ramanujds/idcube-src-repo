@@ -1,0 +1,79 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  ACR_NAME: '<your-acr-name>.azurecr.io'
+  IMAGE_NAME: '$(ACR_NAME)/part-inventory-service'
+  IMAGE_TAG: '$(Build.BuildNumber)'
+  DOTNET_PROJECT: 'PartInventoryService.DotNet/PartInventoryService.DotNet.csproj'
+  GITOPS_REPO_URL: 'https://github.com/ramanujds/gitops-repo-forvia.git'
+  GITOPS_BRANCH: 'main'
+  GITOPS_VALUES_FILE: 'environments/prod/values/inventory-values.yaml'
+
+stages:
+  - stage: CI
+    jobs:
+      - job: Build
+        pool:
+          vmImage: 'ubuntu-latest'
+
+        steps:
+          - task: DotNetCoreCLI@2
+            displayName: 'Run Tests'
+            inputs:
+              command: test
+              projects: '$(DOTNET_PROJECT)'
+              arguments: '--configuration Release'
+
+          - task: Docker@2
+            displayName: 'Build Docker Image'
+            inputs:
+              command: build
+              containerRegistry: 'acr-service-connection'
+              repository: 'part-inventory-service'
+              dockerfile: 'Dockerfile'
+              tags: |
+                $(IMAGE_TAG)
+                latest
+              arguments: '--platform linux/amd64'
+
+          - script: |
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+              trivy image \
+                --exit-code 1 \
+                --severity HIGH,CRITICAL \
+                --no-progress \
+                --format table \
+                $(IMAGE_NAME):$(IMAGE_TAG)
+            displayName: 'Trivy — Vulnerability Scan'
+
+          - task: Docker@2
+            displayName: 'Push Image to ACR'
+            inputs:
+              command: push
+              containerRegistry: 'acr-service-connection'
+              repository: 'part-inventory-service'
+              tags: |
+                $(IMAGE_TAG)
+                latest
+
+          - script: |
+              set -e
+              rm -rf gitops-repo
+              git clone -b $(GITOPS_BRANCH) https://$(GITHUB_PAT)@github.com/ramanujds/gitops-repo-forvia.git gitops-repo
+              cd gitops-repo
+              sed -i "s|^    tag:.*|    tag: \"$(IMAGE_TAG)\"|" $(GITOPS_VALUES_FILE)
+              git config user.name "azure-devops-bot"
+              git config user.email "azure-devops-bot@users.noreply.github.com"
+              git add "$(GITOPS_VALUES_FILE)"
+              if git diff --cached --quiet; then
+                echo "No changes detected; skipping commit."
+              else
+                git commit -m "ci: update inventory image tag to $(IMAGE_TAG)"
+                git push origin $(GITOPS_BRANCH)
+              fi
+            displayName: 'Update GitOps Image Tag'
+            env:
+              GITHUB_PAT: $(github-pat)
