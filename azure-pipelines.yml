@@ -4,7 +4,7 @@ trigger:
       - main
 
 variables:
-  ACR_NAME: '<your-acr-name>.azurecr.io'
+  ACR_NAME: 'idcubeacr.azurecr.io'
   IMAGE_NAME: '$(ACR_NAME)/part-inventory-service'
   IMAGE_TAG: '$(Build.BuildNumber)'
   DOTNET_PROJECT: 'PartInventoryService.DotNet/PartInventoryService.DotNet.csproj'
@@ -61,21 +61,21 @@ stages:
                 $(IMAGE_TAG)
                 latest
 
-          - script: |
-              set -e
-              rm -rf gitops-repo
-              git clone -b $(GITOPS_BRANCH) https://$(GITHUB_PAT)@github.com/ramanujds/gitops-repo-forvia.git gitops-repo
-              cd gitops-repo
-              sed -i "s|^    tag:.*|    tag: \"$(IMAGE_TAG)\"|" $(GITOPS_VALUES_FILE)
-              git config user.name "azure-devops-bot"
-              git config user.email "azure-devops-bot@users.noreply.github.com"
-              git add "$(GITOPS_VALUES_FILE)"
-              if git diff --cached --quiet; then
-                echo "No changes detected; skipping commit."
-              else
-                git commit -m "ci: update inventory image tag to $(IMAGE_TAG)"
-                git push origin $(GITOPS_BRANCH)
-              fi
-            displayName: 'Update GitOps Image Tag'
-            env:
-              GITHUB_PAT: $(github-pat)
+          # - script: |
+          #     set -e
+          #     rm -rf gitops-repo
+          #     git clone -b $(GITOPS_BRANCH) https://$(GITHUB_PAT)@github.com/ramanujds/gitops-repo-forvia.git gitops-repo
+          #     cd gitops-repo
+          #     sed -i "s|^    tag:.*|    tag: \"$(IMAGE_TAG)\"|" $(GITOPS_VALUES_FILE)
+          #     git config user.name "azure-devops-bot"
+          #     git config user.email "azure-devops-bot@users.noreply.github.com"
+          #     git add "$(GITOPS_VALUES_FILE)"
+          #     if git diff --cached --quiet; then
+          #       echo "No changes detected; skipping commit."
+          #     else
+          #       git commit -m "ci: update inventory image tag to $(IMAGE_TAG)"
+          #       git push origin $(GITOPS_BRANCH)
+          #     fi
+          #   displayName: 'Update GitOps Image Tag'
+          #   env:
+          #     GITHUB_PAT: $(github-pat)

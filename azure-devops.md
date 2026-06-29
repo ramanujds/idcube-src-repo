@@ -13,32 +13,82 @@
 
 ```bash
 # Create a resource group (skip if already exists)
-az group create --name myResourceGroup --location eastus
+az group create --name idcube-rg --location southindia
 
 # Create the ACR
 az acr create \
-  --resource-group myResourceGroup \
-  --name <your-acr-name> \
+  --resource-group idcube-rg \
+  --name idcubeacr \
+  --location southindia \
   --sku Basic
 ```
 
-Your image will be pushed to: `<your-acr-name>.azurecr.io/part-inventory-service`
+Your image will be pushed to: `idcubeacr.azurecr.io/part-inventory-service`
 
 ---
 
 ## Step 2 — Create Service Connection for ACR
 
-In Azure DevOps:
+The automatic "Azure Container Registry" picker in Azure DevOps often fails with Service Principal auth. Use the **manual Service Principal** flow below instead.
 
-1. Go to **Project Settings → Service Connections**
-2. Click **New service connection**
-3. Choose **Docker Registry**
-4. Select **Azure Container Registry**
-5. Pick your subscription and the ACR created in Step 1
-6. Name it exactly: `acr-service-connection`
-7. Click **Save**
+### 2a — Create a Service Principal and assign ACR role
 
-> This handles ACR authentication automatically — no passwords stored in the pipeline.
+```bash
+# Get your subscription ID
+az account show --query id -o tsv
+
+# Get the ACR resource ID
+az acr show --name idcubeacr --resource-group idcube-rg --query id -o tsv
+
+# Create a service principal scoped to the ACR with AcrPush role
+az ad sp create-for-rbac \
+  --name idcube-acr-sp \
+  --role AcrPush \
+  --scopes $(az acr show --name idcubeacr --resource-group idcube-rg --query id -o tsv)
+```
+
+The output will look like:
+
+```json
+{
+  "appId": "<client-id>",
+  "displayName": "idcube-acr-sp",
+  "password": "<client-secret>",
+  "tenant": "<tenant-id>"
+}
+```
+
+Save these values — the `password` is shown only once.
+
+### 2b — Create the Service Connection in Azure DevOps
+
+1. Go to **Project Settings → Service Connections → New service connection**
+2. Choose **Docker Registry**
+3. Select **Others** (not "Azure Container Registry" — that triggers the broken auto-auth)
+4. Fill in:
+
+   | Field | Value |
+   | --- | --- |
+   | Docker Registry | `https://idcubeacr.azurecr.io` |
+   | Docker ID | `<appId>` from the SP output |
+   | Docker Password | `<password>` from the SP output |
+   | Email | (leave blank or use any placeholder) |
+
+5. Name it exactly: `acr-service-connection`
+6. Click **Verify and save**
+
+> **Why "Others"?** The "Azure Container Registry" option uses the Azure Resource Manager flow which requires the Azure DevOps identity to already have subscription-level permissions. Using "Others" with the SP credentials bypasses that and authenticates directly against the ACR registry endpoint.
+
+### 2c — Verify the SP can pull/push (optional sanity check)
+
+```bash
+# Log in as the service principal
+az acr login --name idcubeacr \
+  --username <appId> \
+  --password <client-secret>
+
+# Should print: Login Succeeded
+```
 
 ---
 
@@ -63,13 +113,7 @@ In Azure DevOps:
 Open `azure-pipelines.yml` and replace the placeholder on line 4:
 
 ```yaml
-ACR_NAME: '<your-acr-name>.azurecr.io'
-```
-
-Replace `<your-acr-name>` with your actual ACR name, e.g.:
-
-```yaml
-ACR_NAME: 'mycompanyacr.azurecr.io'
+ACR_NAME: 'idcubeacr.azurecr.io'
 ```
 
 If you named the service connection differently in Step 2, also update:
@@ -93,7 +137,7 @@ Option B — directly in `azure-pipelines.yml`:
 variables:
   - group: pipeline-secrets
   - name: ACR_NAME
-    value: 'mycompanyacr.azurecr.io'
+    value: 'idcubeacr.azurecr.io'
   # ... other variables
 ```
 
